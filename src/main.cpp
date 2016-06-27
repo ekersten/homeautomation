@@ -11,29 +11,35 @@ const char* mqtt_server = "erickersten.com";
 const char* mqtt_topic = "ledStatus";
 const byte ledPin = LED_BUILTIN; // Pin with LED on Adafruit Huzzah
 const int switchPin = 5;
+volatile int lastSwitchStatus;
 volatile int ledStatus = HIGH;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-
+void setLedStatus(int status) {
+    ledStatus = status;
+    client.publish("ledStatus", (char*)ledStatus);
+}
 
 void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print("Message arrived [");
     Serial.print(topic);
     Serial.print("] ");
+    int newStatus = 0;
     for (int i=0;i<length;i++) {
         char receivedChar = (char)payload[i];
         Serial.print(receivedChar);
         if (receivedChar == '0') {
-            // ESP8266 Huzzah outputs are "reversed"
-            ledStatus = HIGH;
+            setLedStatus(HIGH);
         }
         if (receivedChar == '1') {
-            ledStatus =  LOW;
+            setLedStatus(LOW);
         }
     }
     Serial.println();
+    Serial.print("remote changed to ");
+    Serial.println(ledStatus);
 }
 
 
@@ -56,12 +62,10 @@ void reconnect() {
     }
 }
 
-void onPinChange() {
-    ledStatus = !ledStatus;
-}
-
 void setup() {
     Serial.begin(115200);
+
+    WiFi.begin(ssid, password);
 
     client.setServer(mqtt_server, 1883);
     client.setCallback(callback);
@@ -69,8 +73,7 @@ void setup() {
     pinMode(ledPin, OUTPUT);
 
     pinMode(switchPin, INPUT);
-
-    attachInterrupt(switchPin, onPinChange, CHANGE);
+    lastSwitchStatus = digitalRead(switchPin);
 }
 
 void loop() {
@@ -80,4 +83,9 @@ void loop() {
     client.loop();
 
     digitalWrite(ledPin, ledStatus);
+
+    if (digitalRead(switchPin) != lastSwitchStatus) {
+        setLedStatus(!ledStatus);
+        lastSwitchStatus = ledStatus;
+    }
 }
